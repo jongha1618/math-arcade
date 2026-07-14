@@ -361,7 +361,7 @@
   let best = 0;
   try { best = parseInt(localStorage.getItem('snakemath_best')||'0',10) || 0; } catch(e){}
 
-  function speedForLevel(){ return Math.max(85, 155 - (level-1)*9); }
+  function speedForLevel(){ return Math.max(120, 215 - (level-1)*8); }
 
   // ---------- Food helpers ----------
   function occupied(x,y){
