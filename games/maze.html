@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Forest Path Maze</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky:#EAF6FF;
+    --sky-deep:#CDEBFF;
+    --leaf:#3FA34D;
+    --leaf-dark:#2C7A38;
+    --bark:#7A5230;
+    --sun:#FFC93C;
+    --coral:#FF6B5D;
+    --coral-dark:#E24E40;
+    --ink:#274B3F;
+    --paper:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:linear-gradient(180deg,var(--sky) 0%,var(--sky-deep) 100%);
+    font-family:'Nunito',sans-serif;
+    color:var(--ink);
+    overflow-x:hidden;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;
+  }
+  h1,h2,.brand,.grade-badge,.big-num{font-family:'Baloo 2',cursive;}
+
+  #app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    padding:14px 14px 28px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  .brand{
+    font-size:22px;
+    font-weight:800;
+    color:var(--leaf-dark);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:4px 0 10px;
+  }
+  .brand .leafdot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--sun);
+    box-shadow:0 0 0 4px rgba(255,201,60,0.3);
+  }
+
+  .hud{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .hud-card{
+    background:var(--paper);
+    border-radius:16px;
+    padding:9px 6px;
+    text-align:center;
+    box-shadow:0 3px 0 rgba(39,75,63,0.12);
+  }
+  .hud-label{
+    font-size:11px;
+    font-weight:700;
+    color:#8AA79C;
+    letter-spacing:.02em;
+    text-transform:uppercase;
+  }
+  .hud-value{
+    font-size:18px;
+    font-weight:800;
+    font-family:'Baloo 2',cursive;
+    color:var(--ink);
+    margin-top:2px;
+  }
+  .hud-value.warn{color:var(--coral-dark);}
+  .hud-value .coin-icon{color:var(--sun);}
+
+  .stage{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    background:#FFFDF6;
+    border-radius:22px;
+    box-shadow:0 8px 0 rgba(39,75,63,0.15), 0 8px 20px rgba(39,75,63,0.12);
+    padding:10px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  canvas{
+    width:100%;height:100%;
+    border-radius:14px;
+    display:block;
+    touch-action:none;
+  }
+
+  .level-strip{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:12px 0 4px;
+    padding:0 2px;
+  }
+  .grade-badge{
+    background:var(--leaf);
+    color:white;
+    font-weight:700;
+    font-size:13px;
+    padding:6px 14px;
+    border-radius:999px;
+    box-shadow:0 2px 0 var(--leaf-dark);
+  }
+  .level-num{
+    font-size:14px;
+    font-weight:700;
+    color:#5C7A70;
+  }
+  .maze-stat{
+    font-size:14px;
+    font-weight:800;
+    font-family:'Baloo 2',cursive;
+    color:#5C7A70;
+    display:flex;
+    align-items:center;
+    gap:4px;
+  }
+  #mazeTimer.warn{color:var(--coral-dark);}
+
+  /* red flash when the fox steps on a trap */
+  .stage.hurt{ animation:hurtflash .35s ease; }
+  @keyframes hurtflash{
+    0%,100%{ box-shadow:0 8px 0 rgba(39,75,63,0.15), 0 8px 20px rgba(39,75,63,0.12); }
+    30%    { box-shadow:0 0 0 4px var(--coral), 0 8px 20px rgba(226,78,64,0.4); }
+  }
+
+  /* small floating message */
+  .toast{
+    position:fixed;
+    left:50%;
+    bottom:110px;
+    transform:translateX(-50%) translateY(10px);
+    background:var(--ink);
+    color:#fff;
+    font-weight:700;
+    font-size:14px;
+    padding:10px 18px;
+    border-radius:999px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.25);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s, transform .2s;
+    z-index:60;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* Virtual joystick control area — touch anywhere inside to spawn a stick */
+  .joyzone{
+    position:relative;
+    width:100%;
+    margin-top:16px;
+    min-height:150px;
+    flex:1 1 auto;
+    border-radius:20px;
+    background:rgba(63,163,77,0.07);
+    border:2px dashed rgba(63,163,77,0.35);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    touch-action:none;
+  }
+  .joyhint{
+    font-size:13px;
+    font-weight:700;
+    color:#8AA79C;
+    pointer-events:none;
+    transition:opacity .15s;
+    text-align:center;
+    padding:0 12px;
+  }
+  .joystick{
+    position:absolute;
+    width:120px;height:120px;
+    border-radius:50%;
+    background:rgba(63,163,77,0.16);
+    border:2px solid rgba(63,163,77,0.4);
+    transform:translate(-50%,-50%);
+    display:none;
+    pointer-events:none;
+    z-index:2;
+  }
+  .joystick.active{display:block;}
+  .joythumb{
+    position:absolute;
+    left:50%;top:50%;
+    width:56px;height:56px;
+    border-radius:50%;
+    background:var(--leaf);
+    box-shadow:0 3px 8px rgba(39,75,63,0.35);
+    transform:translate(-50%,-50%);
+  }
+
+  .hint{
+    margin-top:14px;
+    font-size:12.5px;
+    color:#7C978C;
+    text-align:center;
+    line-height:1.5;
+  }
+
+  /* Modal */
+  .overlay{
+    position:fixed;inset:0;
+    background:rgba(39,75,63,0.55);
+    display:none;
+    align-items:center;justify-content:center;
+    padding:20px;
+    z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:var(--paper);
+    border-radius:22px;
+    padding:26px 22px;
+    max-width:360px;
+    width:100%;
+    text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+  }
+  .modal .emoji{font-size:44px;margin-bottom:6px;}
+  .modal h2{
+    font-size:21px;
+    margin:0 0 8px;
+    color:var(--ink);
+  }
+  .modal p{
+    font-size:14px;
+    color:#5C7A70;
+    line-height:1.6;
+    margin:0 0 18px;
+  }
+  .modal .countdown{
+    font-family:'Baloo 2',cursive;
+    font-size:26px;
+    font-weight:700;
+    color:var(--coral-dark);
+    margin:6px 0 18px;
+  }
+  .btn{
+    display:block;
+    width:100%;
+    border:none;
+    border-radius:14px;
+    padding:13px;
+    font-family:'Nunito',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    cursor:pointer;
+    margin-bottom:10px;
+    transition:transform .05s;
+  }
+  .btn:active{transform:translateY(2px);}
+  .btn-primary{background:var(--leaf);color:white;box-shadow:0 4px 0 var(--leaf-dark);}
+  .btn-coin{background:var(--sun);color:#7A5200;box-shadow:0 4px 0 #D9A400;}
+  .btn-ghost{background:#F1F5F3;color:#5C7A70;box-shadow:none;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn:disabled:active{transform:none;}
+
+  .stars{font-size:30px;margin-bottom:6px;letter-spacing:4px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="brand"><span class="leafdot"></span>Forest Path Maze</div>
+
+  <div class="hud">
+    <div class="hud-card">
+      <div class="hud-label">Level</div>
+      <div class="hud-value" id="hudLevel">1</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-label">Time left today</div>
+      <div class="hud-value" id="hudTime">15:00</div>
+    </div>
+    <div class="hud-card">
+      <div class="hud-label">Coins</div>
+      <div class="hud-value"><span class="coin-icon">●</span> <span id="hudCoins">0</span></div>
+    </div>
+  </div>
+
+  <div class="level-strip">
+    <span class="grade-badge" id="gradeBadge">Grade 2 difficulty</span>
+    <span class="maze-stat" id="acornStat" style="display:none;">🌰 <span id="acornCount">0/0</span></span>
+    <span class="maze-stat" id="mazeTimer">⏱ 0:45</span>
+  </div>
+
+  <div class="stage">
+    <canvas id="mazeCanvas" width="500" height="500"></canvas>
+  </div>
+
+  <div class="joyzone" id="joyzone">
+    <span class="joyhint" id="joyhint">🕹️ Touch &amp; drag anywhere here to steer</span>
+    <div class="joystick" id="joystick">
+      <div class="joythumb" id="joythumb"></div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">Drag the joystick below to steer the fox 🦊, or swipe on the maze for a quick slide. Grab every acorn 🌰, dodge the pits 🕳️, reach the star ⭐ before time runs out!</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Level clear modal -->
+<div class="overlay" id="clearOverlay">
+  <div class="modal">
+    <div class="emoji">🎉</div>
+    <h2>Maze cleared!</h2>
+    <div class="stars" id="clearStars">⭐⭐⭐</div>
+    <p id="clearText">Great job! The next maze will be a bit bigger.</p>
+    <button class="btn btn-primary" id="nextLevelBtn">Next maze →</button>
+  </div>
+</div>
+
+<!-- Maze timeout modal -->
+<div class="overlay" id="timeoutOverlay">
+  <div class="modal">
+    <div class="emoji">⏱️</div>
+    <h2>Time's up!</h2>
+    <p id="timeoutText">You ran out of time on this maze. Give it another try!</p>
+    <button class="btn btn-primary" id="retryBtn">Try again</button>
+  </div>
+</div>
+
+<!-- Time limit modal -->
+<div class="overlay" id="limitOverlay">
+  <div class="modal">
+    <div class="emoji">⏰</div>
+    <h2>You've used today's free time</h2>
+    <p>Come back tomorrow for a full 15 minutes, or use a coin to play 5 more minutes right now!</p>
+    <div class="countdown" id="regenCountdown">Next free coin in 10:00</div>
+    <button class="btn btn-coin" id="useCoinBtn">Use 1 coin for 5 more minutes (<span id="coinBtnCount">0</span> owned)</button>
+    <button class="btn btn-ghost" id="buyCoinBtn">Buy coins (demo)</button>
+  </div>
+</div>
+
+<script>
+(function(){
+
+  /* ---------------- Config ---------------- */
+  const DAILY_LIMIT_SECONDS = 15 * 60;      // 15 free minutes per day
+  const COIN_EXTENSION_SECONDS = 5 * 60;    // 1 coin = 5 more minutes
+  const COIN_REGEN_INTERVAL_MS = 10 * 60 * 1000; // 1 free coin every 10 minutes of waiting
+
+  const KEY_PROGRESS = 'maze-progress';
+  const KEY_DAILY = 'maze-daily';
+  const KEY_COINS = 'maze-coins';
+  const KEY_WAIT = 'maze-wait';
+
+  const mem = {}; // fallback if localStorage is unavailable (e.g. private mode)
+
+  // Backed by localStorage so progress persists in a real browser / on a phone.
+  // Kept async so the rest of the code doesn't need to change.
+  async function storeGet(key){
+    try{
+      const v = localStorage.getItem(key);
+      return v !== null ? JSON.parse(v) : null;
+    }catch(e){
+      return mem[key] !== undefined ? mem[key] : null;
+    }
+  }
+  async function storeSet(key, value){
+    try{
+      localStorage.setItem(key, JSON.stringify(value));
+    }catch(e){
+      mem[key] = value;
+    }
+  }
+
+  function todayStr(){
+    const d = new Date();
+    return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  }
+
+  /* ---------------- State ---------------- */
+  let state = {
+    level: 1,
+    coins: 0,
+    daily: { date: todayStr(), playedSeconds: 0, extraSeconds: 0 },
+    wait: { waiting:false, waitStart:0, credited:0 }
+  };
+
+  let maze = null, size = 5, px=0, py=0, goalX=0, goalY=0;
+  let moveCount = 0;
+  let blocked = false;
+  let acornsTotal = 0, acornsGot = 0;
+  let mazeTimeLeft = 0;
+  let mazeCleared = false;
+
+  const canvas = document.getElementById('mazeCanvas');
+  const ctx = canvas.getContext('2d');
+
+  /* ---------------- Load ---------------- */
+  async function loadAll(){
+    const p = await storeGet(KEY_PROGRESS);
+    const d = await storeGet(KEY_DAILY);
+    const c = await storeGet(KEY_COINS);
+    const w = await storeGet(KEY_WAIT);
+
+    if(p && p.level) state.level = p.level;
+    if(c !== null && typeof c === 'number') state.coins = c;
+
+    if(d && d.date === todayStr()){
+      state.daily = d;
+    } else {
+      // New day: reset free time and wait state (coins carry over)
+      state.daily = { date: todayStr(), playedSeconds: 0, extraSeconds: 0 };
+      state.wait = { waiting:false, waitStart:0, credited:0 };
+      await storeSet(KEY_DAILY, state.daily);
+      await storeSet(KEY_WAIT, state.wait);
+    }
+    if(w && w.waiting) state.wait = w;
+  }
+
+  async function saveDaily(){ await storeSet(KEY_DAILY, state.daily); }
+  async function saveCoins(){ await storeSet(KEY_COINS, state.coins); }
+  async function saveWait(){ await storeSet(KEY_WAIT, state.wait); }
+  async function saveProgress(){ await storeSet(KEY_PROGRESS, { level: state.level }); }
+
+  /* ---------------- Difficulty / level config ----------------
+     Difficulty never stops climbing. Every 3 stages the "tier" goes up:
+       - the maze gets larger (until it caps at a phone-friendly size)
+       - the difficulty label keeps rising forever:
+         Grade 2..12  ->  College  ->  Expert  ->  Master
+         ->  Grandmaster  ->  Legend  ->  Legend II, III, ...
+  */
+  const MAX_MAZE_SIZE = 25; // largest grid; still playable on a phone
+
+  function difficultyLabel(tier){
+    const grade = 2 + tier;               // tier 0 => Grade 2
+    if(grade <= 12) return 'Grade ' + grade;
+
+    // Beyond high school: adult / expert ladder
+    const adult = ['College','Expert','Master','Grandmaster','Legend'];
+    const idx = grade - 13;               // 0 => College
+    if(idx < adult.length) return adult[idx];
+
+    // Endless past Legend: Legend II, Legend III, ...
+    const roman = ['II','III','IV','V','VI','VII','VIII','IX','X',
+                   'XI','XII','XIII','XIV','XV'];
+    const over = idx - adult.length;      // 0 => Legend II
+    return 'Legend ' + (roman[over] || (over + 2));
+  }
+
+  function getLevelConfig(level){
+    const tier = Math.floor((level - 1) / 3);
+    // Maze grows 5,7,9,... then caps so it stays playable on a small screen.
+    const rawSize = 5 + tier * 2;
+    const mazeSize = Math.min(rawSize, MAX_MAZE_SIZE);
+    // Acorns to collect: none for the first two tiers (pure path-finding),
+    // then more and more, up to 10.
+    const acorns = Math.min(Math.max(tier - 1, 0), 10);
+    // Trap tiles: introduced a little later, growing steadily.
+    const traps  = Math.min(Math.max(tier - 2, 0) * 2, 16);
+    // Per-maze time limit (seconds): generous early, tight later.
+    const timeLimit = Math.round(mazeSize * 9 + acorns * 12 + 15);
+    return { label: difficultyLabel(tier), mazeSize, acorns, traps, timeLimit };
+  }
+
+  function refreshLevelBadge(){
+    const cfg = getLevelConfig(state.level);
+    document.getElementById('gradeBadge').textContent = cfg.label + ' difficulty';
+    document.getElementById('hudLevel').textContent = state.level;
+  }
+
+  /* ---------------- Maze generation (recursive backtracker) ---------------- */
+  function generateMaze(n){
+    const grid = [];
+    for(let y=0;y<n;y++){
+      const row = [];
+      for(let x=0;x<n;x++){
+        row.push({visited:false, walls:{top:true,right:true,bottom:true,left:true}});
+      }
+      grid.push(row);
+    }
+    function neighbors(cx,cy){
+      const list = [];
+      if(cy>0 && !grid[cy-1][cx].visited) list.push({x:cx,y:cy-1,dir:'top'});
+      if(cx<n-1 && !grid[cy][cx+1].visited) list.push({x:cx+1,y:cy,dir:'right'});
+      if(cy<n-1 && !grid[cy+1][cx].visited) list.push({x:cx,y:cy+1,dir:'bottom'});
+      if(cx>0 && !grid[cy][cx-1].visited) list.push({x:cx-1,y:cy,dir:'left'});
+      return list;
+    }
+    const opposite = {top:'bottom',bottom:'top',left:'right',right:'left'};
+    let stack = [{x:0,y:0}];
+    grid[0][0].visited = true;
+    while(stack.length){
+      const cur = stack[stack.length-1];
+      const opts = neighbors(cur.x, cur.y);
+      if(opts.length === 0){ stack.pop(); continue; }
+      const pick = opts[Math.floor(Math.random()*opts.length)];
+      grid[cur.y][cur.x].walls[pick.dir] = false;
+      grid[pick.y][pick.x].walls[opposite[pick.dir]] = false;
+      grid[pick.y][pick.x].visited = true;
+      stack.push({x:pick.x,y:pick.y});
+    }
+    return grid;
+  }
+
+  /* Cells that lie on the unique path from start to the goal or to any acorn.
+     Traps are never placed here, so a careful player can always finish. */
+  function computeProtectedCells(keyCells){
+    const idx = (x,y)=> y*size + x;
+    const parent = new Array(size*size).fill(-1);
+    const seen = new Array(size*size).fill(false);
+    const queue = [{x:0,y:0}];
+    seen[idx(0,0)] = true;
+    let head = 0;
+    while(head < queue.length){
+      const cur = queue[head++];
+      const c = maze[cur.y][cur.x];
+      const nbrs = [];
+      if(!c.walls.top)    nbrs.push({x:cur.x,   y:cur.y-1});
+      if(!c.walls.bottom) nbrs.push({x:cur.x,   y:cur.y+1});
+      if(!c.walls.left)   nbrs.push({x:cur.x-1, y:cur.y});
+      if(!c.walls.right)  nbrs.push({x:cur.x+1, y:cur.y});
+      for(const nb of nbrs){
+        if(!seen[idx(nb.x,nb.y)]){
+          seen[idx(nb.x,nb.y)] = true;
+          parent[idx(nb.x,nb.y)] = idx(cur.x,cur.y);
+          queue.push(nb);
+        }
+      }
+    }
+    const prot = new Set();
+    for(const k of keyCells){
+      let cur = idx(k.x, k.y);
+      while(cur !== -1){ prot.add(cur); cur = parent[cur]; }
+    }
+    return prot;
+  }
+
+  function placeItems(cfg){
+    const idx = (x,y)=> y*size + x;
+    const isCorner = (x,y)=> (x===0&&y===0) || (x===size-1&&y===size-1);
+
+    // 1) Scatter acorns on random non-start / non-goal cells.
+    const acornCells = [];
+    const pool = [];
+    for(let y=0;y<size;y++) for(let x=0;x<size;x++) if(!isCorner(x,y)) pool.push({x,y});
+    for(let i=0;i<cfg.acorns && pool.length;i++){
+      const j = Math.floor(Math.random()*pool.length);
+      const cell = pool.splice(j,1)[0];
+      maze[cell.y][cell.x].acorn = true;
+      acornCells.push(cell);
+    }
+    acornsTotal = acornCells.length;
+    acornsGot = 0;
+
+    // 2) Protect the routes to the goal and every acorn, then drop traps
+    //    only on the leftover cells (guaranteed avoidable).
+    const prot = computeProtectedCells([{x:goalX,y:goalY}, ...acornCells]);
+    const trapPool = pool.filter(c => !prot.has(idx(c.x,c.y)));
+    for(let i=0;i<cfg.traps && trapPool.length;i++){
+      const j = Math.floor(Math.random()*trapPool.length);
+      const cell = trapPool.splice(j,1)[0];
+      maze[cell.y][cell.x].trap = true;
+    }
+  }
+
+  function newMaze(){
+    const cfg = getLevelConfig(state.level);
+    size = cfg.mazeSize;
+    maze = generateMaze(size);
+    px = 0; py = 0;
+    goalX = size-1; goalY = size-1;
+    moveCount = 0;
+    mazeCleared = false;
+    placeItems(cfg);
+    mazeTimeLeft = cfg.timeLimit;
+    refreshLevelBadge();
+    updateMazeStats();
+    draw();
+  }
+
+  function updateMazeStats(){
+    const acornStat = document.getElementById('acornStat');
+    if(acornsTotal > 0){
+      acornStat.style.display = 'flex';
+      document.getElementById('acornCount').textContent = acornsGot + '/' + acornsTotal;
+    } else {
+      acornStat.style.display = 'none';
+    }
+    updateMazeTimer();
+  }
+
+  function updateMazeTimer(){
+    const el = document.getElementById('mazeTimer');
+    const m = Math.floor(mazeTimeLeft/60), s = mazeTimeLeft%60;
+    el.textContent = '⏱ ' + m + ':' + String(s).padStart(2,'0');
+    el.classList.toggle('warn', mazeTimeLeft <= 15);
+  }
+
+  /* ---------------- Rendering ---------------- */
+  function draw(){
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#FFFDF6';
+    ctx.fillRect(0,0,W,H);
+
+    const cell = W / size;
+    ctx.strokeStyle = '#2C7A38';
+    ctx.lineWidth = Math.max(2, cell*0.06);
+    ctx.lineCap = 'round';
+
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const c = maze[y][x];
+        const x0 = x*cell, y0 = y*cell;
+        ctx.beginPath();
+        if(c.walls.top){ ctx.moveTo(x0,y0); ctx.lineTo(x0+cell,y0); }
+        if(c.walls.right){ ctx.moveTo(x0+cell,y0); ctx.lineTo(x0+cell,y0+cell); }
+        if(c.walls.bottom){ ctx.moveTo(x0,y0+cell); ctx.lineTo(x0+cell,y0+cell); }
+        if(c.walls.left){ ctx.moveTo(x0,y0); ctx.lineTo(x0,y0+cell); }
+        ctx.stroke();
+      }
+    }
+
+    ctx.font = `${cell*0.55}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Traps and acorns
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const c = maze[y][x];
+        const cx = x*cell + cell/2, cy = y*cell + cell/2;
+        if(c.trap)  ctx.fillText('🕳️', cx, cy);
+        if(c.acorn) ctx.fillText('🌰', cx, cy);
+      }
+    }
+
+    // Goal: locked until every acorn is collected
+    const goalReady = acornsGot >= acornsTotal;
+    ctx.fillText(goalReady ? '⭐' : '🔒', goalX*cell + cell/2, goalY*cell + cell/2);
+
+    // Player (fox)
+    ctx.fillText('🦊', px*cell + cell/2, py*cell + cell/2);
+  }
+
+  /* ---------------- Movement ---------------- */
+  let toastTimer = null;
+  function toast(msg){
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> el.classList.remove('show'), 1400);
+  }
+
+  function hurt(){
+    const stage = document.querySelector('.stage');
+    stage.classList.remove('hurt');
+    void stage.offsetWidth; // restart the animation
+    stage.classList.add('hurt');
+  }
+
+  const OPPOSITE = {up:'down', down:'up', left:'right', right:'left'};
+
+  function canGo(x, y, dir){
+    const c = maze[y][x];
+    if(dir==='up')    return !c.walls.top;
+    if(dir==='down')  return !c.walls.bottom;
+    if(dir==='left')  return !c.walls.left;
+    if(dir==='right') return !c.walls.right;
+    return false;
+  }
+  function openDirs(x, y){
+    const c = maze[y][x];
+    const d = [];
+    if(!c.walls.top)    d.push('up');
+    if(!c.walls.bottom) d.push('down');
+    if(!c.walls.left)   d.push('left');
+    if(!c.walls.right)  d.push('right');
+    return d;
+  }
+
+  // Move exactly one cell. Returns 'wall' | 'trap' | 'acorn' | 'goal' | 'ok'.
+  function moveStep(dir){
+    if(!canGo(px, py, dir)) return 'wall';
+    if(dir==='up') py--;
+    else if(dir==='down') py++;
+    else if(dir==='left') px--;
+    else if(dir==='right') px++;
+    moveCount++;
+    const cell = maze[py][px];
+    if(cell.trap){ px = 0; py = 0; return 'trap'; }
+    if(cell.acorn){ cell.acorn = false; acornsGot++; return 'acorn'; }
+    if(px===goalX && py===goalY) return 'goal';
+    return 'ok';
+  }
+
+  function tryMove(dir){
+    if(blocked || mazeCleared) return;
+
+    let status = moveStep(dir);
+    if(status === 'wall') return; // couldn't move at all
+
+    let trapHit = (status === 'trap');
+    let collected = (status === 'acorn') ? 1 : 0;
+    let reachedGoal = (status === 'goal');
+
+    // Keep sliding in the same direction through a forced straight corridor:
+    // stop at a wall, a junction (a turn is available), the goal, or a trap.
+    while(status === 'ok' || status === 'acorn'){
+      if(!canGo(px, py, dir)) break;                       // wall ahead -> stop
+      const branches = openDirs(px, py)
+        .filter(d => d !== dir && d !== OPPOSITE[dir]);     // any turn options?
+      if(branches.length > 0) break;                       // junction -> let player choose
+      status = moveStep(dir);
+      if(status === 'trap') trapHit = true;
+      else if(status === 'acorn') collected++;
+      else if(status === 'goal') reachedGoal = true;
+    }
+
+    finishMove(trapHit, collected, reachedGoal);
+  }
+
+  // Shared after-move handling: redraw, then show the right feedback.
+  function finishMove(trapHit, collected, reachedGoal){
+    updateMazeStats();
+    draw();
+    if(trapHit){
+      hurt();
+      toast('Ouch! Back to start 🕳️');
+      return;
+    }
+    if(collected > 0){
+      toast(acornsGot >= acornsTotal
+        ? 'All acorns collected! The star is open ⭐'
+        : '🌰 ' + acornsGot + '/' + acornsTotal);
+    }
+    if(reachedGoal){
+      if(acornsGot >= acornsTotal) onClear();
+      else toast('Collect all acorns first! 🌰');
+    }
+  }
+
+  function onClear(){
+    mazeCleared = true;
+    blocked = true;
+    const stars = moveCount <= size*2 ? '⭐⭐⭐' : (moveCount <= size*3 ? '⭐⭐' : '⭐');
+    document.getElementById('clearStars').textContent = stars;
+    document.getElementById('clearText').textContent =
+      `You reached the goal in ${moveCount} moves! The next maze will be a bit bigger.`;
+    document.getElementById('clearOverlay').classList.add('show');
+  }
+
+  document.getElementById('nextLevelBtn').addEventListener('click', async ()=>{
+    document.getElementById('clearOverlay').classList.remove('show');
+    state.level += 1;
+    await saveProgress();
+    blocked = false;
+    newMaze();
+    checkLimit();
+  });
+
+  function onTimeout(){
+    if(mazeCleared) return;
+    blocked = true;
+    document.getElementById('timeoutText').textContent =
+      acornsTotal > 0
+        ? 'You ran out of time. Try a faster route to the acorns and the star!'
+        : 'You ran out of time on this maze. Give it another try!';
+    document.getElementById('timeoutOverlay').classList.add('show');
+  }
+
+  document.getElementById('retryBtn').addEventListener('click', ()=>{
+    document.getElementById('timeoutOverlay').classList.remove('show');
+    blocked = false;
+    newMaze();      // fresh layout at the same level
+    checkLimit();
+  });
+
+  /* ---------------- Input: keyboard ---------------- */
+  window.addEventListener('keydown', (e)=>{
+    const map = {ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+    if(map[e.key]){ e.preventDefault(); tryMove(map[e.key]); }
+  });
+
+  /* ---------------- Input: swipe (quick flick) on the maze ----------------
+     A short flick slides the fox to the next junction in that direction. */
+  const SWIPE_THRESHOLD = 22;
+  let swActive = false, swX = 0, swY = 0;
+
+  canvas.addEventListener('touchstart', (e)=>{
+    const t = e.touches[0]; swActive = true; swX = t.clientX; swY = t.clientY;
+  }, {passive:true});
+  canvas.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, {passive:false});
+  canvas.addEventListener('touchend', (e)=>{
+    if(!swActive) return; swActive = false;
+    const t = e.changedTouches[0];
+    doSwipe(t.clientX - swX, t.clientY - swY);
+  }, {passive:true});
+
+  canvas.addEventListener('mousedown', (e)=>{ swActive = true; swX = e.clientX; swY = e.clientY; });
+  canvas.addEventListener('mouseup',   (e)=>{
+    if(!swActive) return; swActive = false;
+    doSwipe(e.clientX - swX, e.clientY - swY);
+  });
+
+  function doSwipe(dx, dy){
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+    if(Math.max(absX, absY) < SWIPE_THRESHOLD) return;
+    if(absX > absY) tryMove(dx > 0 ? 'right' : 'left');
+    else            tryMove(dy > 0 ? 'down'  : 'up');
+  }
+
+  /* ---------------- Input: virtual joystick ----------------
+     Touch anywhere in the control area to spawn a stick under your finger.
+     Push it toward a direction and the fox keeps stepping that way while held. */
+  const joyzone  = document.getElementById('joyzone');
+  const joystick = document.getElementById('joystick');
+  const joythumb = document.getElementById('joythumb');
+  const joyhint  = document.getElementById('joyhint');
+  const JOY_RADIUS = 46;   // how far the thumb can travel
+  const JOY_DEAD   = 14;   // dead zone before a direction registers
+  const JOY_REPEAT = 110;  // ms between steps while held
+  let joyActive = false, joyBaseX = 0, joyBaseY = 0, joyDir = null, joyTimer = null;
+
+  function joyStart(clientX, clientY){
+    joyActive = true; joyDir = null;
+    joyBaseX = clientX; joyBaseY = clientY;
+    const rect = joyzone.getBoundingClientRect();
+    joystick.style.left = (clientX - rect.left) + 'px';
+    joystick.style.top  = (clientY - rect.top)  + 'px';
+    joystick.classList.add('active');
+    joyhint.style.opacity = '0';
+    joythumb.style.transform = 'translate(-50%,-50%)';
+    if(!joyTimer) joyTimer = setInterval(joyTick, JOY_REPEAT);
+  }
+  function joySteer(clientX, clientY){
+    if(!joyActive) return;
+    const dx = clientX - joyBaseX, dy = clientY - joyBaseY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const capped = Math.min(dist, JOY_RADIUS);
+    const nx = dx / dist * capped, ny = dy / dist * capped;
+    joythumb.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+    if(dist < JOY_DEAD){ joyDir = null; return; }
+    const newDir = (Math.abs(dx) >= Math.abs(dy))
+      ? (dx > 0 ? 'right' : 'left')
+      : (dy > 0 ? 'down'  : 'up');
+    // Step immediately when the direction first changes, for snappy response.
+    if(newDir !== joyDir){ joyDir = newDir; joyTick(); }
+  }
+  function joyEnd(){
+    joyActive = false; joyDir = null;
+    joystick.classList.remove('active');
+    joyhint.style.opacity = '';
+    if(joyTimer){ clearInterval(joyTimer); joyTimer = null; }
+  }
+  function joyTick(){
+    if(!joyDir || blocked || mazeCleared) return;
+    const st = moveStep(joyDir);
+    if(st === 'wall') return;                 // pushing into a wall: stay put
+    finishMove(st === 'trap', st === 'acorn' ? 1 : 0, st === 'goal');
+    if(st === 'trap' || st === 'goal') joyDir = null; // stop auto-repeat after a reset/clear
+  }
+
+  joyzone.addEventListener('touchstart', (e)=>{
+    e.preventDefault(); const t = e.touches[0]; joyStart(t.clientX, t.clientY);
+  }, {passive:false});
+  joyzone.addEventListener('touchmove', (e)=>{
+    e.preventDefault(); const t = e.touches[0]; joySteer(t.clientX, t.clientY);
+  }, {passive:false});
+  joyzone.addEventListener('touchend',    ()=> joyEnd(), {passive:true});
+  joyzone.addEventListener('touchcancel', ()=> joyEnd(), {passive:true});
+
+  joyzone.addEventListener('mousedown', (e)=>{ joyStart(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', (e)=>{ if(joyActive) joySteer(e.clientX, e.clientY); });
+  window.addEventListener('mouseup',   ()=>{ if(joyActive) joyEnd(); });
+
+  /* ---------------- Time / coin logic ---------------- */
+  function totalAllowedSeconds(){
+    return DAILY_LIMIT_SECONDS + state.daily.extraSeconds;
+  }
+  function remainingSeconds(){
+    return Math.max(0, totalAllowedSeconds() - state.daily.playedSeconds);
+  }
+  function fmt(sec){
+    const m = Math.floor(sec/60), s = Math.floor(sec%60);
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  function updateHud(){
+    document.getElementById('hudTime').textContent = fmt(remainingSeconds());
+    const timeEl = document.getElementById('hudTime');
+    timeEl.classList.toggle('warn', remainingSeconds() <= 60);
+    document.getElementById('hudCoins').textContent = state.coins;
+    document.getElementById('coinBtnCount').textContent = state.coins;
+    document.getElementById('useCoinBtn').disabled = state.coins <= 0;
+  }
+
+  function checkLimit(){
+    if(remainingSeconds() <= 0){
+      blocked = true;
+      if(!state.wait.waiting){
+        state.wait = { waiting:true, waitStart: Date.now(), credited:0 };
+        saveWait();
+      }
+      document.getElementById('limitOverlay').classList.add('show');
+    } else {
+      blocked = false;
+      document.getElementById('limitOverlay').classList.remove('show');
+    }
+  }
+
+  function regenTick(){
+    if(!state.wait.waiting) return;
+    const elapsed = Date.now() - state.wait.waitStart;
+    const owed = Math.floor(elapsed / COIN_REGEN_INTERVAL_MS);
+    const newCoins = owed - state.wait.credited;
+    if(newCoins > 0){
+      state.coins += newCoins;
+      state.wait.credited = owed;
+      saveCoins(); saveWait();
+      updateHud();
+    }
+    const remainderMs = COIN_REGEN_INTERVAL_MS - (elapsed % COIN_REGEN_INTERVAL_MS);
+    const remSec = Math.ceil(remainderMs/1000);
+    document.getElementById('regenCountdown').textContent =
+      `Next free coin in ${fmt(remSec)}`;
+  }
+
+  document.getElementById('useCoinBtn').addEventListener('click', async ()=>{
+    if(state.coins <= 0) return;
+    state.coins -= 1;
+    state.daily.extraSeconds += COIN_EXTENSION_SECONDS;
+    await saveCoins(); await saveDaily();
+    state.wait = { waiting:false, waitStart:0, credited:0 };
+    await saveWait();
+    updateHud();
+    checkLimit();
+  });
+
+  document.getElementById('buyCoinBtn').addEventListener('click', async ()=>{
+    // Demo purchase simulation only (a real release would connect to Google Play Billing)
+    state.coins += 5;
+    await saveCoins();
+    updateHud();
+    alert('Demo purchase complete! You received 5 coins.\n(In the real release this would connect to Google Play in-app billing)');
+  });
+
+  /* ---------------- Main timer ---------------- */
+  function mainTick(){
+    if(blocked){
+      regenTick();
+      return;
+    }
+    // Daily free-time economy
+    state.daily.playedSeconds += 1;
+    if(state.daily.playedSeconds % 5 === 0) saveDaily();
+    updateHud();
+    checkLimit();
+    if(blocked) return; // daily limit just ran out this tick
+
+    // Per-maze countdown
+    if(!mazeCleared && mazeTimeLeft > 0){
+      mazeTimeLeft -= 1;
+      updateMazeTimer();
+      if(mazeTimeLeft <= 0) onTimeout();
+    }
+  }
+
+  /* ---------------- Start ---------------- */
+  async function init(){
+    await loadAll();
+    refreshLevelBadge();
+    updateHud();
+    newMaze();
+    checkLimit();
+    setInterval(mainTick, 1000);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
