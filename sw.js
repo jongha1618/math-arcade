@@ -1,5 +1,5 @@
 /* Math Arcade service worker — offline app shell + games */
-const CACHE = 'math-arcade-v1';
+const CACHE = 'math-arcade-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,16 +29,33 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((cached) =>
-      cached ||
+  const url = new URL(e.request.url);
+  const isPage = e.request.mode === 'navigate' ||
+                 url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+
+  if (isPage) {
+    // Network-first for the app + game pages: online users always get the
+    // newest version; fall back to cache when offline.
+    e.respondWith(
       fetch(e.request)
         .then((resp) => {
           const copy = resp.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
           return resp;
         })
-        .catch(() => caches.match('./index.html'))
-    )
-  );
+        .catch(() => caches.match(e.request).then((r) => r || caches.match('./index.html')))
+    );
+  } else {
+    // Cache-first for static assets (icons, manifest).
+    e.respondWith(
+      caches.match(e.request).then((cached) =>
+        cached ||
+        fetch(e.request).then((resp) => {
+          const copy = resp.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          return resp;
+        })
+      )
+    );
+  }
 });
