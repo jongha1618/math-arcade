@@ -115,6 +115,25 @@
   @keyframes firePulse{0%,100%{box-shadow:0 6px 0 #a5391a,0 10px 22px rgba(0,0,0,.45),0 0 0 0 rgba(255,154,77,.5)}50%{box-shadow:0 6px 0 #a5391a,0 10px 22px rgba(0,0,0,.45),0 0 0 10px rgba(255,154,77,0)}}
   @media (prefers-reduced-motion:reduce){ #fire{animation:none} }
 
+  /* ---------- Virtual joystick (left) ---------- */
+  #joy{
+    position:absolute;z-index:6;
+    left:max(16px, env(safe-area-inset-left));
+    bottom:max(22px, env(safe-area-inset-bottom));
+    width:clamp(118px,33vw,158px);aspect-ratio:1;border-radius:50%;
+    background:rgba(12,32,54,.4);border:2px solid rgba(150,185,235,.32);
+    backdrop-filter:blur(2px);
+    touch-action:none;display:none;place-items:center;
+  }
+  #joy.show{display:grid}
+  #joyKnob{
+    width:46%;height:46%;border-radius:50%;
+    background:radial-gradient(circle at 50% 38%, rgba(232,241,255,.9), rgba(150,180,230,.65));
+    border:2px solid rgba(255,255,255,.65);
+    box-shadow:0 4px 10px rgba(0,0,0,.35);
+    pointer-events:none;transform:translate(0,0);
+  }
+
   /* ---------- Toast ---------- */
   #toast{
     position:absolute;left:50%;top:32%;z-index:6;
@@ -209,6 +228,7 @@
   <div id="toast"></div>
 
   <button id="fire" class="hidden">FIRE</button>
+  <div id="joy"><div id="joyKnob"></div></div>
 
   <!-- Start screen -->
   <div class="overlay" id="startScreen">
@@ -217,9 +237,9 @@
     <div class="grade-label">Choose your level</div>
     <div class="grades" id="gradePicker"></div>
     <div class="how">
-      Drag anywhere to fly your plane.<br>
+      Use the <b>joystick (left)</b> to fly your plane, <b>FIRE (right)</b> to shoot.<br>
       • <b>Grey fighters</b>: your guns fire automatically — blast as many as you like.<br>
-      • <b>Numbered squadron</b>: auto-fire stops! Take aim and press <b>FIRE</b> (or Space) to shoot ONLY the plane with the correct answer.<br>
+      • <b>Numbered squadron</b>: auto-fire stops! Steer under the right plane and press <b>FIRE</b> to shoot ONLY the one with the correct answer.<br>
       • Wrong number = lose a heart (you get 3)!
     </div>
     <button class="btn-play" id="playBtn">Take Off!</button>
@@ -344,7 +364,8 @@
   // ---------- State ----------
   const GRUNT_COLORS = ['#8a97a8','#7d8a6a','#9a6b6b','#6f7f92'];
   const NUM_COLORS   = ['#ff6f9c','#ffa74d','#ffd24a','#7ee0a1','#6cc7ff','#b98bff'];
-  let plane = null, tx = 0, ty = 0;
+  let plane = null;
+  const joyVec = { x:0, y:0 };   // virtual-joystick direction, each axis -1..1
   let enemies = [], bullets = [], particles = [], clouds = [];
   let mode = 'combat';                 // 'combat' | 'math'
   let running = false;
@@ -367,8 +388,6 @@
     const minY = playTop + (playBottom-playTop)*0.42;
     plane.x = Math.max(pad, Math.min(W-pad, plane.x));
     plane.y = Math.max(minY, Math.min(playBottom - S*0.6, plane.y));
-    tx = Math.max(pad, Math.min(W-pad, tx));
-    ty = Math.max(minY, Math.min(playBottom - S*0.6, ty));
   }
 
   // ---------- Enemies ----------
@@ -443,7 +462,6 @@
   }
 
   // ---------- Input ----------
-  let dragging = false;
   function fireBullet(){
     bullets.push({ x:plane.x, y:plane.y - S*1.0, vy:-9 });
     sfx.shoot();
@@ -454,16 +472,36 @@
     shootCooldown = 130;
     fireBullet();
   }
-  canvas.addEventListener('pointerdown', e => {
-    if(!running) return;
-    dragging = true; tx = e.clientX; ty = e.clientY; clampPlane();
-  });
-  canvas.addEventListener('pointermove', e => {
-    if(!running || !dragging) return;
-    tx = e.clientX; ty = e.clientY;
-  });
-  window.addEventListener('pointerup', ()=>{ dragging = false; });
-  window.addEventListener('pointercancel', ()=>{ dragging = false; });
+
+  // Virtual joystick (left): steer the plane while your finger stays off it.
+  const joyEl = document.getElementById('joy');
+  const joyKnob = document.getElementById('joyKnob');
+  let joyId = null, joyCx = 0, joyCy = 0, joyMax = 1;
+  function joyStart(e){
+    e.preventDefault();
+    joyId = e.pointerId;
+    try { joyEl.setPointerCapture(e.pointerId); } catch(_){}
+    const r = joyEl.getBoundingClientRect();
+    joyCx = r.left + r.width/2; joyCy = r.top + r.height/2; joyMax = r.width*0.34;
+    joyMove(e);
+  }
+  function joyMove(e){
+    if(e.pointerId !== joyId) return;
+    let dx = e.clientX - joyCx, dy = e.clientY - joyCy;
+    const d = Math.hypot(dx, dy);
+    if(d > joyMax){ dx = dx/d*joyMax; dy = dy/d*joyMax; }
+    joyVec.x = dx/joyMax; joyVec.y = dy/joyMax;
+    joyKnob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+  }
+  function joyEnd(e){
+    if(e && e.pointerId !== joyId) return;
+    joyId = null; joyVec.x = 0; joyVec.y = 0;
+    joyKnob.style.transform = 'translate(0,0)';
+  }
+  joyEl.addEventListener('pointerdown', joyStart);
+  joyEl.addEventListener('pointermove', joyMove);
+  joyEl.addEventListener('pointerup', joyEnd);
+  joyEl.addEventListener('pointercancel', joyEnd);
 
   const fireBtn = document.getElementById('fire');
   fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); firing = true; shoot(); });
@@ -489,14 +527,17 @@
     for(const c of clouds){ c.y += c.sp*dtf; if(c.y > H + 60){ c.y = -60; c.x = Math.random()*W; } }
 
     if(running){
-      const ks = S*0.5*dtf;
-      if(keys['arrowleft']||keys['a']) tx -= ks;
-      if(keys['arrowright']||keys['d']) tx += ks;
-      if(keys['arrowup']||keys['w']) ty -= ks;
-      if(keys['arrowdown']||keys['s']) ty += ks;
+      // steer with the virtual joystick (analog) + keyboard
+      let vx = joyVec.x, vy = joyVec.y;
+      if(keys['arrowleft']||keys['a']) vx -= 1;
+      if(keys['arrowright']||keys['d']) vx += 1;
+      if(keys['arrowup']||keys['w']) vy -= 1;
+      if(keys['arrowdown']||keys['s']) vy += 1;
+      if(vx > 1) vx = 1; if(vx < -1) vx = -1;
+      if(vy > 1) vy = 1; if(vy < -1) vy = -1;
+      const spd = S*0.34*dtf;
+      plane.x += vx*spd; plane.y += vy*spd;
       clampPlane();
-      plane.x += (tx - plane.x)*Math.min(1,0.35*dtf);
-      plane.y += (ty - plane.y)*Math.min(1,0.35*dtf);
 
       if(shootCooldown > 0) shootCooldown -= dt;
 
@@ -750,7 +791,9 @@
     setBanner(false);
     computeLayout();
     plane = { x: W/2, y: playBottom - S*1.5 };
-    tx = plane.x; ty = plane.y; clampPlane();
+    clampPlane();
+    joyVec.x = 0; joyVec.y = 0; joyKnob.style.transform = 'translate(0,0)';
+    el('joy').classList.add('show');
     enemies = []; bullets = []; particles = [];
     initClouds();
     spawnGrunt(); spawnGrunt();
@@ -761,6 +804,7 @@
   function endGame(){
     running = false;
     setBanner(false);
+    el('joy').classList.remove('show');
     el('hud').classList.add('hidden');
     el('finalScore').textContent = score;
     el('finalCoins').textContent = coinCount;
