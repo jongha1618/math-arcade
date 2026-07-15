@@ -510,7 +510,13 @@
         if(gruntTimer >= gruntInterval() && enemies.filter(e=>e.type==='grunt'&&e.alive).length < GRUNT_CAP){
           gruntTimer = 0; spawnGrunt();
         }
-        if(combatTimer >= combatDuration()) startMathWave();
+        // Stop the combat phase, but don't spawn the numbered squadron yet —
+        // wait until leftover auto-fire bullets have cleared (see 'clearing').
+        if(combatTimer >= combatDuration()) mode = 'clearing';
+      } else if(mode === 'clearing'){
+        // No firing, no new grunts. Once every player bullet is off-screen,
+        // launch the math wave so a stray shot can't hit a wrong-answer plane.
+        if(bullets.length === 0) startMathWave();
       } else {
         // math wave: no auto-fire — the player must aim and press FIRE
         if(firing) shoot();
