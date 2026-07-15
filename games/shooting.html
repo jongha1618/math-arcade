@@ -221,13 +221,12 @@
     </div>
     <div class="eqwrap">
       <div class="equation" id="equation"><span id="eqText">3 + 5</span> = <span class="qm">?</span></div>
-      <div id="banner" class="hidden">🎯 Aim &amp; press FIRE — hit the answer!</div>
+      <div id="banner" class="hidden">🎯 Tap the plane with the answer!</div>
     </div>
   </div>
 
   <div id="toast"></div>
 
-  <button id="fire" class="hidden">FIRE</button>
   <div id="joy"><div id="joyKnob"></div></div>
 
   <!-- Start screen -->
@@ -237,9 +236,9 @@
     <div class="grade-label">Choose your level</div>
     <div class="grades" id="gradePicker"></div>
     <div class="how">
-      Use the <b>joystick (left)</b> to fly your plane, <b>FIRE (right)</b> to shoot.<br>
+      Use the <b>joystick (left)</b> to fly your plane.<br>
       • <b>Grey fighters</b>: your guns fire automatically — blast as many as you like.<br>
-      • <b>Numbered squadron</b>: auto-fire stops! Steer under the right plane and press <b>FIRE</b> to shoot ONLY the one with the correct answer.<br>
+      • <b>Numbered squadron</b>: auto-fire stops! <b>Tap the plane with the correct answer</b> to shoot it down.<br>
       • Wrong number = lose a heart (you get 3)!
     </div>
     <button class="btn-play" id="playBtn">Take Off!</button>
@@ -371,7 +370,6 @@
   let running = false;
   let score = 0, coinCount = 0, kills = 0, lives = 3, level = 1, streak = 0;
   let shake = 0, fireTimer = 0, gruntTimer = 0, combatTimer = 0, scroll = 0;
-  let firing = false, shootCooldown = 0;   // manual firing during math waves
   const keys = {};
   let best = 0;
   try { best = parseInt(localStorage.getItem('shootmath_best')||'0',10) || 0; } catch(e){}
@@ -466,13 +464,6 @@
     bullets.push({ x:plane.x, y:plane.y - S*1.0, vy:-9 });
     sfx.shoot();
   }
-  // manual shot (used during math waves); honors a short cooldown
-  function shoot(){
-    if(!running || !plane || shootCooldown > 0) return;
-    shootCooldown = 130;
-    fireBullet();
-  }
-
   // Virtual joystick (left): steer the plane while your finger stays off it.
   const joyEl = document.getElementById('joy');
   const joyKnob = document.getElementById('joyKnob');
@@ -503,22 +494,24 @@
   joyEl.addEventListener('pointerup', joyEnd);
   joyEl.addEventListener('pointercancel', joyEnd);
 
-  const fireBtn = document.getElementById('fire');
-  fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); firing = true; shoot(); });
-  fireBtn.addEventListener('pointerup',   e => { e.preventDefault(); firing = false; });
-  fireBtn.addEventListener('pointercancel', ()=>{ firing = false; });
-  fireBtn.addEventListener('pointerleave', ()=>{ firing = false; });
+  // During the numbered squadron, tap the enemy plane you think is the answer.
+  // A guided shot flies to exactly that plane — no stray hits on other planes.
+  canvas.addEventListener('pointerdown', e => {
+    if(!running || mode !== 'math') return;
+    const mx = e.clientX, my = e.clientY;
+    let hit = null, lowest = -Infinity;
+    for(const en of enemies){
+      if(!en.alive || en.type !== 'num') continue;
+      if(Math.hypot(mx - en.x, my - en.y) < S*1.15 && en.y > lowest){ lowest = en.y; hit = en; }
+    }
+    if(hit){ bullets.push({ x:plane.x, y:plane.y - S*1.0, target:hit }); sfx.shoot(); }
+  });
 
   window.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if(k === ' ' || k === 'spacebar'){ e.preventDefault(); if(!e.repeat){ firing = true; shoot(); } return; }
     if(['arrowleft','arrowright','arrowup','arrowdown','a','d','w','s'].includes(k)){ e.preventDefault(); keys[k]=true; }
   });
-  window.addEventListener('keyup', e => {
-    const k = e.key.toLowerCase();
-    if(k === ' ' || k === 'spacebar'){ firing = false; return; }
-    keys[k] = false;
-  });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
   // ---------- Update ----------
   function update(dt){
@@ -539,8 +532,6 @@
       plane.x += vx*spd; plane.y += vy*spd;
       clampPlane();
 
-      if(shootCooldown > 0) shootCooldown -= dt;
-
       if(mode === 'combat'){
         // auto-fire while blasting grey fighters
         fireTimer += dt;
@@ -558,14 +549,23 @@
         // No firing, no new grunts. Once every player bullet is off-screen,
         // launch the math wave so a stray shot can't hit a wrong-answer plane.
         if(bullets.length === 0) startMathWave();
-      } else {
-        // math wave: no auto-fire — the player must aim and press FIRE
-        if(firing) shoot();
       }
+      // math wave: the player taps a numbered plane to fire a guided shot at it.
     }
 
-    for(const b of bullets) b.y += b.vy*dtf;
-    bullets = bullets.filter(b => b.y > playTop - 40 && !b.dead);
+    for(const b of bullets){
+      if(b.target){
+        // guided shot: fly straight to the tapped plane, resolve on arrival
+        const dx = b.target.x - b.x, dy = b.target.y - b.y, d = Math.hypot(dx, dy) || 1;
+        const sp = 13*dtf;
+        b.x += dx/d*sp; b.y += dy/d*sp;
+        if(!b.target.alive){ b.dead = true; }
+        else if(d < S*0.7){ onHit(b.target); b.dead = true; }
+      } else {
+        b.y += b.vy*dtf;
+      }
+    }
+    bullets = bullets.filter(b => !b.dead && (b.target || b.y > playTop - 40));
 
     for(const e of enemies){
       if(!e.alive) continue;
@@ -585,7 +585,7 @@
     // bullet vs enemy — hit the lowest enemy in the path first
     if(running){
       for(const b of bullets){
-        if(b.dead) continue;
+        if(b.dead || b.target) continue;   // guided shots resolve themselves
         let target = null, bestY = -Infinity;
         for(const e of enemies){
           if(!e.alive) continue;
@@ -741,14 +741,11 @@
     }
   }
   function setBanner(on){
-    const b = el('banner'), eq = el('equation'), f = el('fire');
-    firing = false;
+    const b = el('banner'), eq = el('equation');
     if(on){
       b.classList.remove('hidden'); b.classList.add('show'); eq.classList.add('active');
-      f.classList.remove('hidden');
     } else {
       b.classList.add('hidden'); b.classList.remove('show'); eq.classList.remove('active');
-      f.classList.add('hidden');
     }
   }
   function flashEq(cls){
